@@ -1,8 +1,11 @@
+#!/bin/bash
 # =====================================================================
 # troca_gpg.sh - Gestão de chaves GPG e troca cifrada de credenciais
 #   Ana   (estação admin, 192.168.10.10)  -> remetente
 #   Bruno (servidor gateway)              -> destinatário
 # O transporte dos arquivos usa scp na porta 2222, já com o SSH endurecido.
+# Executar na máquina hospedeira, depois do implantar.sh.
+# (As frases-senha ficam no script só para a demonstração rodar sozinha.)
 # =====================================================================
 set -e
 SENHA_ANA="frase longa da Ana para o laboratorio OT"
@@ -12,21 +15,11 @@ SCP="scp -q -P 2222 -o StrictHostKeyChecking=accept-new"
 LOOP="--batch --yes --pinentry-mode loopback"
 
 gerar_chave() {  # $1=container $2=usuario $3=nome $4=frase-senha
-  docker exec -i -u "$2" "$1" bash -c "gpg --list-keys '$3' >/dev/null 2>&1 || gpg --batch --gen-key" <<EOF
-Key-Type: DSA
-Key-Length: 3072
-Subkey-Type: ELG-E
-Subkey-Length: 3072
-Name-Real: $3
-Name-Comment: Admin OT
-Name-Email: $2@industria.local
-Expire-Date: 0
-Passphrase: $4
-%commit
-EOF
+  docker exec -u "$2" "$1" bash -c "gpg --list-keys '$3' >/dev/null 2>&1 || \
+    gpg $LOOP --passphrase '$4' --quick-generate-key '$3 <$2@industria.local>'"
 }
 
-echo "### 1. Geração dos pares de chaves (gpg --gen-key)"
+echo "### 1. Geração dos pares de chaves (chave de assinatura + subchave de cifragem)"
 gerar_chave admin   ana   "Ana Admin"   "$SENHA_ANA"
 gerar_chave gateway bruno "Bruno Admin" "$SENHA_BRUNO"
 
