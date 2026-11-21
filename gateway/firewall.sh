@@ -5,7 +5,7 @@
 # =====================================================================
 
 # Nome de cada interface pelo IP (o Docker não garante a ordem eth0/eth1/eth2)
-iface() { ip -o -4 addr show | awk -v ip="$1/" 'index($4, ip) == 1 {print $2}'; }
+iface() { ip -o -4 addr show to "$1" | awk '{print $2}'; }
 WAN=$(iface 203.0.113.2); LAN=$(iface 192.168.10.254); OT=$(iface 192.168.20.254)
 
 ADMIN=192.168.10.10        # estação de administração
@@ -24,7 +24,7 @@ for C in INPUT FORWARD; do
   iptables -A $C -m conntrack --ctstate INVALID -j DROP                # pacote fora de qualquer conexão
   iptables -A $C -p tcp --tcp-flags ALL NONE -j DROP                   # NULL scan (sem flags)
   iptables -A $C -p tcp --tcp-flags ALL FIN,PSH,URG -j DROP            # XMAS scan
-  iptables -A $C -p tcp ! --syn -m conntrack --ctstate NEW -j DROP     # conexão nova sem SYN (FIN/ACK scan)
+  iptables -A $C -p tcp ! --syn -m conntrack --ctstate NEW -j DROP     # conexão nova sem SYN
 
   # Respostas de conexões já autorizadas
   iptables -A $C -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
