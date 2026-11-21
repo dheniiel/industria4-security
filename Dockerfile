@@ -10,3 +10,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 # Scripts de segurança do servidor Ubuntu (firewall, hardening e integridade)
 COPY gateway/ /opt/seguranca/
 RUN chmod 700 /opt/seguranca /opt/seguranca/*.sh
+
+# Scripts de inicialização de cada contêiner (chamados pelo "command" do docker-compose)
+COPY inicializacao/ /opt/inicializacao/
+RUN chmod 700 /opt/inicializacao /opt/inicializacao/*.sh

@@ -25,8 +25,7 @@ services:
       wan:      { ipv4_address: 203.0.113.2 }     # interface externa (WAN)
       lan_ti:   { ipv4_address: 192.168.10.254 }  # interface interna (LAN)
       ot_scada: { ipv4_address: 192.168.20.254 }  # interface interna (OT)
-    command: bash -c "route del default; route add default gw 203.0.113.1;
-                      echo nameserver 8.8.8.8 > /etc/resolv.conf; sleep infinity"
+    command: ["bash", "/opt/inicializacao/gateway.sh"]
 
   # Estação de administração (LAN)
   admin:
@@ -36,7 +35,7 @@ services:
     cap_add: [NET_ADMIN]
     networks:
       lan_ti: { ipv4_address: 192.168.10.10 }
-    command: bash -c "route del default; route add default gw 192.168.10.254; sleep infinity"
+    command: ["bash", "/opt/inicializacao/admin.sh"]
 
   # Servidor de telemetria (OT): painel 80, banco 5432 e CLP Modbus 502 simulados
   telemetria:
@@ -46,9 +45,7 @@ services:
     cap_add: [NET_ADMIN]
     networks:
       ot_scada: { ipv4_address: 192.168.20.10 }
-    command: bash -c "route del default; route add default gw 192.168.20.254; cd /tmp;
-                      python3 -m http.server 80 & python3 -m http.server 5432 &
-                      python3 -m http.server 502 & sleep infinity"
+    command: ["bash", "/opt/inicializacao/telemetria.sh"]
 
   # Atacante simulado na Internet (usado nos testes)
   externo:
@@ -58,4 +55,4 @@ services:
     cap_add: [NET_ADMIN]
     networks:
       wan: { ipv4_address: 203.0.113.10 }
-    command: bash -c "route add -net 192.168.0.0 netmask 255.255.0.0 gw 203.0.113.2; sleep infinity"
+    command: ["bash", "/opt/inicializacao/externo.sh"]
