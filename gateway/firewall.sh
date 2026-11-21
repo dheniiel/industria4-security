@@ -1,83 +1,55 @@
 #!/bin/bash
 # =====================================================================
-# firewall.sh - Firewall perimetral do servidor Ubuntu (gateway)
+# firewall.sh - Firewall do gateway (iptables)
 #   WAN 203.0.113.2 | LAN 192.168.10.254 | OT/SCADA 192.168.20.254
 # =====================================================================
 
-# Descobre o nome de cada interface pelo seu IP estático (o Docker Compose não garante
-# a ordem eth0/eth1/eth2 ao ligar o container às redes)
-interface() { ip -o -4 addr show | awk -v ip="$1" '$4 ~ "^"ip"/" {print $2}'; }
-WAN=$(interface 203.0.113.2); LAN=$(interface 192.168.10.254); OT=$(interface 192.168.20.254)
-echo "Interfaces: WAN=$WAN  LAN=$LAN  OT=$OT"
-REDE_LAN=192.168.10.0/24
-ADMIN=192.168.10.10          # estação de administração (única com SSH e acesso ao banco)
-TELEMETRIA=192.168.20.10     # servidor de telemetria/banco de dados industrial
-SSH=2222
+# Nome de cada interface pelo IP (o Docker não garante a ordem eth0/eth1/eth2)
+iface() { ip -o -4 addr show | awk -v ip="$1/" 'index($4, ip) == 1 {print $2}'; }
+WAN=$(iface 203.0.113.2); LAN=$(iface 192.168.10.254); OT=$(iface 192.168.20.254)
 
-# 1. Limpeza de regras, chains e contadores
-iptables -F; iptables -t nat -F; iptables -X; iptables -Z
+ADMIN=192.168.10.10        # estação de administração
+TELEMETRIA=192.168.20.10   # painel e banco de dados industrial
 
-# 2. Política padrão restritiva
+# 1. Limpa as regras e define a política padrão: bloquear tudo
+iptables -F; iptables -X; iptables -t nat -F
 iptables -P INPUT   DROP
 iptables -P FORWARD DROP
 iptables -P OUTPUT  ACCEPT
 
-# 3. Chains de usuário
-#    BLOQUEIA: registra e descarta. Todo bloqueio passa por aqui (auditoria).
-#    O limite evita que uma enxurrada de pacotes lote o log.
-iptables -N BLOQUEIA
-iptables -A BLOQUEIA -m limit --limit 30/min -j LOG --log-prefix "[FW BLOQUEADO] "
-iptables -A BLOQUEIA -j DROP
-
-#    ANTI_SCAN: flags TCP que só aparecem em varreduras (NULL, XMAS, SYN+FIN) e
-#    pacotes INVALID (ex.: FIN/ACK scan)
-iptables -N ANTI_SCAN
-iptables -A ANTI_SCAN -p tcp --tcp-flags ALL NONE        -j BLOQUEIA
-iptables -A ANTI_SCAN -p tcp --tcp-flags ALL FIN,PSH,URG -j BLOQUEIA
-iptables -A ANTI_SCAN -p tcp --tcp-flags SYN,FIN SYN,FIN -j BLOQUEIA
-iptables -A ANTI_SCAN -m state --state INVALID           -j BLOQUEIA
-
-#    LIMITE_DOS: no máximo 20 novas conexões TCP por segundo (rajada de 40)
-iptables -N LIMITE_DOS
-iptables -A LIMITE_DOS -m limit --limit 20/s --limit-burst 40 -j RETURN
-iptables -A LIMITE_DOS -j BLOQUEIA
-
-# 4. Proteções gerais e regra stateful
+# 2. Proteções que valem para o gateway (INPUT) e para quem passa por ele (FORWARD)
 iptables -A INPUT -i lo -j ACCEPT
-for CHAIN in INPUT FORWARD; do
-  iptables -A $CHAIN -j ANTI_SCAN
-  iptables -A $CHAIN -m state --state ESTABLISHED,RELATED -j ACCEPT
-  iptables -A $CHAIN -p tcp --syn -j LIMITE_DOS
+for C in INPUT FORWARD; do
+  # Anti-varredura: pacotes que nenhuma conexão normal usa
+  iptables -A $C -m conntrack --ctstate INVALID -j DROP                # pacote fora de qualquer conexão
+  iptables -A $C -p tcp --tcp-flags ALL NONE -j DROP                   # NULL scan (sem flags)
+  iptables -A $C -p tcp --tcp-flags ALL FIN,PSH,URG -j DROP            # XMAS scan
+  iptables -A $C -p tcp ! --syn -m conntrack --ctstate NEW -j DROP     # conexão nova sem SYN (FIN/ACK scan)
+
+  # Respostas de conexões já autorizadas
+  iptables -A $C -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+  # Anti-DoS: no máximo 20 conexões novas por segundo POR IP (rajada de 40)
+  iptables -A $C -p tcp --syn -m hashlimit --hashlimit-above 20/sec --hashlimit-burst 40 --hashlimit-mode srcip --hashlimit-name dos_$C -j DROP
 done
 
-# 5. INPUT - serviços do próprio servidor
-#    SSH: só da estação admin, porta 2222, máx. 4 conexões/min (força bruta)
-iptables -A INPUT -i $LAN -s $ADMIN -p tcp --dport $SSH -m state --state NEW -m limit --limit 4/min --limit-burst 5 -j ACCEPT
-#    Ping: só da LAN, limitado (anti ping-flood)
-iptables -A INPUT -i $LAN -p icmp --icmp-type echo-request -m limit --limit 1/s -j ACCEPT
-iptables -A INPUT -j BLOQUEIA
+# O gateway só aceita SSH (porta 2222) da estação admin, no máximo 4 conexões por minuto (anti-força bruta)
+iptables -A INPUT -i $LAN -s $ADMIN -p tcp --dport 2222 -m limit --limit 4/min --limit-burst 5 -j ACCEPT
 
-# 6. FORWARD - tráfego entre as redes
-#    LAN -> telemetria: painel 80/443 para a LAN; banco 5432 só para a estação admin.
-#    O Modbus (502, sem senha) nunca é liberado: fica restrito à própria OT.
-iptables -A FORWARD -i $LAN -o $OT -s $REDE_LAN -d $TELEMETRIA -p tcp -m multiport --dports 80,443 -m state --state NEW -j ACCEPT
-iptables -A FORWARD -i $LAN -o $OT -s $ADMIN -d $TELEMETRIA -p tcp --dport 5432 -m state --state NEW -j ACCEPT
-#    LAN -> Internet: HTTP/HTTPS e DNS
-iptables -A FORWARD -i $LAN -o $WAN -s $REDE_LAN -p tcp -m multiport --dports 80,443,53 -m state --state NEW -j ACCEPT
-iptables -A FORWARD -i $LAN -o $WAN -s $REDE_LAN -p udp --dport 53 -m state --state NEW -j ACCEPT
-#    Todo o resto (WAN -> LAN/OT, OT -> qualquer lugar, LAN -> 502...) é bloqueado
-iptables -A FORWARD -j BLOQUEIA
+# Só o necessário entre as redes
+iptables -A FORWARD -i $LAN -o $OT  -d $TELEMETRIA -p tcp --dport 80   -j ACCEPT    # LAN -> painel (HTTP)
+iptables -A FORWARD -i $LAN -o $OT  -s $ADMIN -d $TELEMETRIA -p tcp --dport 5432 -j ACCEPT  # admin -> banco
+iptables -A FORWARD -i $LAN -o $WAN -p tcp -m multiport --dports 53,80,443 -j ACCEPT # LAN -> Internet (DNS, HTTP, HTTPS)
+iptables -A FORWARD -i $LAN -o $WAN -p udp --dport 53 -j ACCEPT                      # LAN -> Internet (DNS)
 
-# 7. OUTPUT - o servidor de borda não inicia conexões para a OT:
-#    se ele for invadido, não vira trampolim até o chão de fábrica
-iptables -A OUTPUT -o $OT -m state --state NEW -j BLOQUEIA
+# O gateway não inicia conexões para a OT
+iptables -A OUTPUT -o $OT -m conntrack --ctstate NEW -j DROP
 
-# 8. NAT: só a LAN sai para a Internet; a OT não tem saída
-iptables -t nat -A POSTROUTING -o $WAN -s $REDE_LAN -j MASQUERADE
+# Só a LAN sai para a Internet, com o IP da WAN do gateway
+iptables -t nat -A POSTROUTING -o $WAN -s 192.168.10.0/24 -j MASQUERADE
 
-# 9. Salva as regras (auditadas pelo integridade.sh). Sem comentários de data
-#    nem contadores, para o hash só mudar quando as REGRAS mudarem.
+# Salva as regras para o integridade.sh (sem data e sem contadores, para o hash só mudar quando as REGRAS mudarem)
 mkdir -p /etc/iptables
 iptables-save | sed -e '/^#/d' -e 's/ \[[0-9]*:[0-9]*\]//' > /etc/iptables/rules.v4
 chmod 600 /etc/iptables/rules.v4
-echo "Firewall aplicado e salvo em /etc/iptables/rules.v4"
+echo "Firewall aplicado (WAN=$WAN LAN=$LAN OT=$OT)"

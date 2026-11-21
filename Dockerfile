@@ -7,10 +7,10 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
         telnet ftp rsh-redone-client \
     && mkdir -p /run/sshd
 
-# Scripts de segurança do servidor Ubuntu (firewall, hardening e integridade)
+# Scripts de segurança do servidor Ubuntu 
 COPY gateway/ /opt/seguranca/
 RUN chmod 700 /opt/seguranca /opt/seguranca/*.sh
 
-# Scripts de inicialização de cada contêiner (chamados pelo "command" do docker-compose)
+# Scripts de inicialização de cada contêiner 
 COPY inicializacao/ /opt/inicializacao/
 RUN chmod 700 /opt/inicializacao /opt/inicializacao/*.sh
