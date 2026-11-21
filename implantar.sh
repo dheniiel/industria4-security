@@ -5,15 +5,13 @@
 set -eo pipefail   # pipefail: um erro em qualquer parte de um "|" também interrompe o script
 docker compose up -d --build
 
-# Estação admin: conta individual e par de chaves SSH de cada administrador.
-# A chave pública vai para o gateway; a privada nunca sai da estação.
-# (No laboratório a chave privada fica sem frase-senha para os testes rodarem sozinhos.)
+# Aguarda a inicialização dos contêineres gerar as chaves SSH (admin.sh e telemetria.sh)
+until docker exec admin test -f /home/dheniel/.ssh/id_ed25519.pub && docker exec telemetria test -f /home/felipe/.ssh/id_ed25519.pub; do sleep 1; done
+
+# A chave pública de cada administrador vai para o gateway (hardening.sh); a privada nunca sai do contêiner
 docker exec gateway mkdir -p /opt/seguranca/chaves
-for u in ana bruno; do
-  docker exec admin bash -c "id $u >/dev/null 2>&1 || useradd -m -s /bin/bash $u"
-  docker exec -u $u admin bash -c "[ -f ~/.ssh/id_ed25519 ] || ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/id_ed25519; cat ~/.ssh/id_ed25519.pub" \
-    | docker exec -i gateway tee /opt/seguranca/chaves/$u.pub >/dev/null
-done
+docker exec admin      cat /home/dheniel/.ssh/id_ed25519.pub | docker exec -i gateway tee /opt/seguranca/chaves/dheniel.pub >/dev/null
+docker exec telemetria cat /home/felipe/.ssh/id_ed25519.pub  | docker exec -i gateway tee /opt/seguranca/chaves/felipe.pub  >/dev/null
 
 # Segurança do gateway. A baseline de integridade vem por último,
 # depois que o firewall e o hardening já alteraram os arquivos monitorados.

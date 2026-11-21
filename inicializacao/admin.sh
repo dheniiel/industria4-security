@@ -10,5 +10,8 @@ id dheniel >/dev/null 2>&1 || useradd -m -s /bin/bash dheniel
 # Par de chaves GPG do Dheniel
 su - dheniel -c "gpg -k dheniel@industria4.local >/dev/null 2>&1 || gpg --batch --passphrase '' --quick-gen-key 'dheniel <dheniel@industria4.local>'"
 
+# Par de chaves SSH do Dheniel (a pública vai para o gateway pelo implantar.sh)
+su - dheniel -c "[ -f ~/.ssh/id_ed25519 ] || ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/id_ed25519"
+
 # Mantém o contêiner ligado
 sleep infinity
