@@ -33,8 +33,9 @@ for C in INPUT FORWARD; do
   iptables -A $C -p tcp --syn -m hashlimit --hashlimit-above 20/sec --hashlimit-burst 40 --hashlimit-mode srcip --hashlimit-name dos_$C -j DROP
 done
 
-# O gateway só aceita SSH (porta 2222) da estação admin, no máximo 4 conexões por minuto (anti-força bruta)
+# O gateway só aceita SSH (porta 2222) do admin (dheniel) e da telemetria (felipe), no máximo 4 conexões por minuto (anti-força bruta)
 iptables -A INPUT -i $LAN -s $ADMIN -p tcp --dport 2222 -m limit --limit 4/min --limit-burst 5 -j ACCEPT
+iptables -A INPUT -i $OT  -s $TELEMETRIA -p tcp --dport 2222 -m limit --limit 4/min --limit-burst 5 -j ACCEPT
 
 # Só o necessário entre as redes
 iptables -A FORWARD -i $LAN -o $OT  -d $TELEMETRIA -p tcp --dport 80   -j ACCEPT    # LAN -> painel (HTTP)

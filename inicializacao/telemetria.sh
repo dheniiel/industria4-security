@@ -7,6 +7,9 @@ route add default gw 192.168.20.254
 # Usuário Felipe 
 id felipe >/dev/null 2>&1 || useradd -m -s /bin/bash felipe
 
+# Par de chaves GPG do Felipe
+su - felipe -c "gpg -k felipe@industria4.local >/dev/null 2>&1 || gpg --batch --passphrase '' --quick-gen-key 'felipe <felipe@industria4.local>'"
+
 # Serviços simulados: painel 80, banco 5432 e CLP Modbus 502.
 # São servidores HTTP simples que publicam a pasta /tmp 
 cd /tmp
