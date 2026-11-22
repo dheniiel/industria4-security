@@ -9,7 +9,7 @@ apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get -y upgrade
 
 # 2. Remoção de pacotes desnecessários (clientes inseguros, sem criptografia)
-apt-get -y purge telnet inetutils-telnet ftp tnftp rsh-redone-client
+apt-get -y purge telnet inetutils-telnet ftp tnftp rsh-redone-client nmap
 apt-get -y autoremove --purge
 
 # 3. Contas dos administradores, com acesso só por chave
