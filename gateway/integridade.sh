@@ -16,14 +16,15 @@ case "$1" in
     cat "$BASE"
     ;;
   verificar)
-    FALHAS=$(sha256sum -c --quiet "$BASE" 2>&1 | grep -v WARNING)
-    if [ -n "$FALHAS" ]; then
-      while read -r l; do log "ALERTA: alteração não autorizada -> $l"; done <<< "$FALHAS"
-      echo -e "\e[1;41m ALERTA DE INTEGRIDADE \e[0m\n$FALHAS\nDetalhes em $LOG"
+    # diff compara os hashes guardados (<) com os recalculados agora (>); sem diferença, ele termina com sucesso
+    if DIFERENCAS=$(sha256sum $ARQUIVOS | diff "$BASE" - 2>&1); then
+      log "OK: integridade verificada"
+      echo -e "\e[1;32mOK\e[0m integridade preservada"
+    else
+      log "ALERTA: alteração não autorizada"$'\n'"$DIFERENCAS"
+      echo -e "\e[1;41m ALERTA DE INTEGRIDADE \e[0m\n$DIFERENCAS\nDetalhes em $LOG"
       exit 1
     fi
-    log "OK: integridade verificada"
-    echo -e "\e[1;32mOK\e[0m integridade preservada"
     ;;
   *)
     echo "Uso: $0 {init|verificar}"; exit 2 ;;
