@@ -53,3 +53,7 @@ chmod -R o-w /etc                                     # nada em /etc gravável p
 chown root:shadow /etc/shadow /etc/gshadow && chmod 640 /etc/shadow /etc/gshadow
 chmod 600 /etc/ssh/sshd_config
 chmod -R o-rwx /var/log      
+
+# Auditoria de integridade (integridade.sh) a cada 5 minutos pelo cron
+grep -q integridade.sh /etc/crontab || echo "*/5 * * * * root /opt/seguranca/integridade.sh verificar >/dev/null" >> /etc/crontab
+service cron start
