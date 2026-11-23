@@ -13,5 +13,8 @@ su - dheniel -c "gpg -k dheniel@industria4.local >/dev/null 2>&1 || gpg --batch 
 # Par de chaves SSH do Dheniel (a pública vai para o gateway pelo implantar.sh)
 su - dheniel -c "[ -f ~/.ssh/id_ed25519 ] || ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/id_ed25519"
 
+# Remove ferramentas desnecessárias: varredura de portas (nmap) e acesso remoto sem criptografia (telnet)
+apt-get -y -qq purge nmap telnet inetutils-telnet >/dev/null 2>&1
+
 # Mantém o contêiner ligado
 sleep infinity

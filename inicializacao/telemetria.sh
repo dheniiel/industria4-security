@@ -20,5 +20,8 @@ python3 -m http.server 80 &
 python3 -m http.server 5432 &
 python3 -m http.server 502 &
 
+# Remove ferramentas desnecessárias: varredura de portas (nmap) e acesso remoto sem criptografia (telnet)
+apt-get -y -qq purge nmap telnet inetutils-telnet >/dev/null 2>&1
+
 # Mantém o contêiner ligado
 sleep infinity
